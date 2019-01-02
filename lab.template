@@ -1,0 +1,473 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  AuthName:
+    Default: ServerlessdaysCognito
+    Description: Unique Auth Name for Cognito Resources (e.g. ServerlessDaysCognito)
+    Type: String
+
+Resources:
+  CognitoAuthenticatedRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRoleWithWebIdentity
+          Condition:
+            ForAnyValue:StringLike:
+              cognito-identity.amazonaws.com:amr: authenticated
+            StringEquals:
+              cognito-identity.amazonaws.com:aud:
+                Ref: IdentityPool
+          Effect: Allow
+          Principal:
+            Federated: cognito-identity.amazonaws.com
+        Version: '2012-10-17'
+      RoleName: CognitoAuthenticatedRole
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - mobileanalytics:PutEvents
+            - cognito-sync:*
+            - cognito-identity:*
+            Effect: Allow
+            Resource: '*'
+          - Action:
+            - lambda:InvokeFunction
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: CognitoAuthorizedPolicy
+    Type: AWS::IAM::Role
+  CognitoUnauthenticatedRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRoleWithWebIdentity
+          Condition:
+            ForAnyValue:StringLike:
+              cognito-identity.amazonaws.com:amr: unauthenticated
+            StringEquals:
+              cognito-identity.amazonaws.com:aud:
+                Ref: IdentityPool
+          Effect: Allow
+          Principal:
+            Federated: cognito-identity.amazonaws.com
+        Version: '2012-10-17'
+      RoleName: CognitoUnauthenticatedRole
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - mobileanalytics:PutEvents
+            - cognito-sync:*
+            - sns:publish
+            - athena:*
+            - dynamodb:GetItem
+            - dynamodb:Query
+            - dynamodb:Scan
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: CognitoUnauthorizedPolicy
+    Type: AWS::IAM::Role
+  GlueServiceRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - glue.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+      Path: /
+      RoleName: GlueServiceRole
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - glue:*
+            - s3:GetBucketLocation
+            - s3:ListBucket
+            - s3:ListAllMyBuckets
+            - s3:GetObject
+            - s3:PutObject
+            - s3:DeleteObject
+            - s3:CreateBucket
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            - iam:ListRolePolicies
+            - iam:GetRole
+            - iam:GetRolePolicy
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: GlueServiceRolePoicy
+    Type: AWS::IAM::Role
+  IdentityPool:
+    Properties:
+      AllowUnauthenticatedIdentities: true
+      IdentityPoolName:
+        Fn::Sub: ${AuthName}Identity
+    Type: AWS::Cognito::IdentityPool
+  IdentityPoolRoleMapping:
+    Properties:
+      IdentityPoolId:
+        Ref: IdentityPool
+      Roles:
+        authenticated:
+          Fn::GetAtt:
+          - CognitoAuthenticatedRole
+          - Arn
+        unauthenticated:
+          Fn::GetAtt:
+          - CognitoUnauthenticatedRole
+          - Arn
+    Type: AWS::Cognito::IdentityPoolRoleAttachment
+  KinesisAnalyticsRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - kinesisanalytics.amazonaws.com
+        Version: '2012-10-17'
+      RoleName: KinesisAnalyticsRole
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - kinesisanalytics:*
+            - firehose:*
+            - lambda:InvokeFunction
+            - lambda:GetFunctionConfiguration
+            - lambda:InvokeAsync
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: Open
+    Type: AWS::IAM::Role
+  knStream:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Condition:
+            StringEquals:
+              sts:ExternalId:
+                Ref: AWS::AccountId
+          Effect: Allow
+          Principal:
+            Service:
+            - firehose.amazonaws.com
+        Version: '2012-10-17'
+      RoleName: knStream
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - s3:AbortMultipartUpload
+            - s3:GetBucketLocation
+            - s3:GetObject
+            - s3:ListBucket
+            - s3:ListBucketMultipartUploads
+            - s3:PutObject
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: KinesisFirehoseS3Policy
+    Type: AWS::IAM::Role
+  LambdaAPIgExecutionRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - apigateway.amazonaws.com
+        Version: '2012-10-17'
+      Path: /
+      RoleName: LambdaAPIgExecutionRole
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - logs:*
+            - lambda:InvokeFunction
+            - lambda:InvokeAsync
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: root
+    Type: AWS::IAM::Role
+  fnReadStream:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Path: /
+      RoleName: fnReadStream
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Effect: Allow
+            Resource: arn:aws:logs:*:*:*
+          - Action:
+            - dynamodb:DescribeStream
+            - dynamodb:GetRecords
+            - dynamodb:GetShardIterator
+            - dynamodb:ListStreams
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: LambdaRolePolicy
+    Type: AWS::IAM::Role
+  fnWriteFirehose:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+      RoleName: fnWriteFirehose
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - firehose:PutRecord
+            - firehose:PutRecordBatch
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: KinesisFirehosePutRecord
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+    Type: AWS::IAM::Role
+  LambdaLoadTestRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+      RoleName: LambdaLoadTestRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+    Type: AWS::IAM::Role
+  SDLambdaInvoke:
+    Properties:
+      PolicyDocument:
+        Statement:
+        - Action:
+          - lambda:InvokeFunction
+          Effect: Allow
+          Resource: '*'
+        Version: '2012-10-17'
+      PolicyName: SDLambdaInvoke
+      Roles:
+      - Ref: fnReadStream
+    Type: AWS::IAM::Policy
+  SDReadDDBStream:
+    Properties:
+      PolicyDocument:
+        Statement:
+        - Action:
+          - dynamodb:GetRecords
+          - dynamodb:GetShardIterator
+          - dynamodb:DescribeStream
+          - dynamodb:ListStreams
+          Effect: Allow
+          Resource: '*'
+        Version: '2012-10-17'
+      PolicyName: SDReadDDBStream
+      Roles:
+      - Ref: fnReadStream
+    Type: AWS::IAM::Policy
+  ScalingRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - application-autoscaling.amazonaws.com
+        Version: '2012-10-17'
+      Path: /
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - dynamodb:DescribeTable
+            - dynamodb:UpdateTable
+            - cloudwatch:PutMetricAlarm
+            - cloudwatch:DescribeAlarms
+            - cloudwatch:GetMetricStatistics
+            - cloudwatch:SetAlarmState
+            - cloudwatch:DeleteAlarms
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: root
+    Type: AWS::IAM::Role
+  fnCreateOrder:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+      RoleName: fnCreateOrder
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Path: /
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - dynamodb:*
+            - xray:PutTraceSegments
+            - xray:PutTelemetryRecords
+            - xray:GetSamplingRules
+            - xray:GetSamplingTargets
+            - xray:GetSamplingStatisticsSummaries
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: policyWriteDynamoDB
+    Type: AWS::IAM::Role
+  fnLoadData:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+      RoleName: fnLoadData
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Path: /
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - dynamodb:*
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: policyWriteDynamoDB
+    Type: AWS::IAM::Role
+  fnUpdateInventory:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+      RoleName: fnUpdateInventory
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Path: /
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: policyWriteDynamoDB
+    Type: AWS::IAM::Role
+  fnCreateVendorOrder:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+      RoleName: fnCreateVendorOrder
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Path: /
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: policyWriteDynamoDB
+    Type: AWS::IAM::Role
+  IdentityPool:
+    Properties:
+      AllowUnauthenticatedIdentities: true
+      IdentityPoolName:
+        Fn::Sub: ServerlessdaysCognitoIdentity
+    Type: AWS::Cognito::IdentityPool
+  IdentityPoolRoleMapping:
+    Properties:
+      IdentityPoolId:
+        Ref: IdentityPool
+      Roles:
+        authenticated:
+          Fn::GetAtt:
+          - CognitoAuthenticatedRole
+          - Arn
+        unauthenticated:
+          Fn::GetAtt:
+          - CognitoUnauthenticatedRole
+          - Arn
+    Type: AWS::Cognito::IdentityPoolRoleAttachment
