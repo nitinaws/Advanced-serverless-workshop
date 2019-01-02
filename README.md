@@ -8,9 +8,9 @@
 
 ## Lab Overview
 
-###In this workshop as a customer, you will be building a real-world scalable serverless online order-processing solution that you can port over to kick-start your business. This lab focuses on meeting the needs of the entrepreneurs and even large business owners who want to move to a serverless solution and minimize their IT operations overhead.
+### In this workshop as a customer, you will be building a real-world scalable serverless online order-processing solution that you can port over to kick-start your business. This lab focuses on meeting the needs of the entrepreneurs and even large business owners who want to move to a serverless solution and minimize their IT operations overhead.
 
-###The end goal of the workshop is to tell the story of the evolution of an online retailer, and the decision choices and design changes he makes to adopt an enterprise-level serverless solution. The manufacturer moves through four phases of evolution:
+### The end goal of the workshop is to tell the story of the evolution of an online retailer, and the decision choices and design changes he makes to adopt an enterprise-level serverless solution. The manufacturer moves through four phases of evolution:
 
 > -    Phase 1 - Garage Start up - The online retailer uses static web pages (S3), and processes orders via emails, fulfilled by Amazon.
 
@@ -55,7 +55,7 @@ Other AWS services than the ones needed for this lab are disabled by IAM Policy 
 
 <!--include:StartLab-->
 
-###Note: Please note that with the deployment of this qwiklab, a number of IAM roles are created that will be used by various services.
+### Note: Please note that with the deployment of this qwiklab, a number of IAM roles are created that will be used by various services.
 
 This Lab is split into the following phases:
 
